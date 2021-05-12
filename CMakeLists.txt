@@ -3,9 +3,10 @@ cmake_minimum_required(VERSION 2.8)
 
 PROJECT("led_analyzer")
 
-
-# Swig is required to generate the bindings.
-FIND_PACKAGE(SWIG REQUIRED)
+# Get the VCS version for the jonchki configuration.
+INCLUDE(cmake/version.cmake)
+INCLUDE(cmake/platform.cmake)
+MESSAGE("Building for: ${JONCHKI_PLATFORM}")
 
 # Find the Doxygen package
 FIND_PACKAGE(Doxygen)
