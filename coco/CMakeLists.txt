@@ -73,6 +73,8 @@ IF((${BUILDCFG_ONLY_JONCHKI_CFG} STREQUAL "OFF"))
 		SET_PROPERTY(TARGET TARGET_led_analyzer PROPERTY LINK_FLAGS "-static-libgcc -static-libstdc++")
 	ENDIF((${CMAKE_SYSTEM_NAME} STREQUAL "Windows") AND (${CMAKE_COMPILER_IS_GNUCC}))
 
+	# Install the lua module.
+	INSTALL(TARGETS TARGET_led_analyzer DESTINATION ${INSTALL_DIR_LUA_MODULES})
 
 	# Add tests for this module.
 	IF((${CMAKE_SYSTEM_NAME} STREQUAL "Windows") AND (${CMAKE_COMPILER_IS_GNUCC}))
