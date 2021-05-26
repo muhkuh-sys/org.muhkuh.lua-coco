@@ -65,8 +65,8 @@ IF((${BUILDCFG_ONLY_JONCHKI_CFG} STREQUAL "OFF"))
 	TARGET_INCLUDE_DIRECTORIES(TARGET_led_analyzer PRIVATE "${LIBFTDI_INCLUDE_DIR}")
 	TARGET_INCLUDE_DIRECTORIES(TARGET_led_analyzer PRIVATE "${LIBUSB_INCLUDE_DIR}")
 
-	# Set the name of the output file to "coco".
-	SET_TARGET_PROPERTIES(TARGET_led_analyzer PROPERTIES PREFIX "" OUTPUT_NAME "coco")
+	# Set the name of the output file to "led_analyzer".
+	SET_TARGET_PROPERTIES(TARGET_led_analyzer PROPERTIES PREFIX "" OUTPUT_NAME "led_analyzer")
 
 	# On mingw link all compiler libraries static.
 	IF((${CMAKE_SYSTEM_NAME} STREQUAL "Windows") AND (${CMAKE_COMPILER_IS_GNUCC}))
