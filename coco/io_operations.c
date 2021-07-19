@@ -38,7 +38,7 @@ values can be assigned to the output pins and data can be read back from the inp
 /* Info - How the code works */
 /* Each process pins databack functions reads two bytes, namely the lowbyte and the highbyte of each channel,
 thus 2 of these commands result in 4 Bytes read back ... as we only want to evaluate the value on the bus on negative
-clock edge we read a byte (lowbyte) increment the bytenumber in the rec buffer by one, then read the highbyte. then if we icremented by one
+clock edge we read a byte (lowbyte) increment the bytenumber in the rec buffer by one, then read the highbyte. then if we incremented by one
 we would read back the value on positive clock cycle of lowbyte, increment by another one would get the value on positive clock edge
 of highbyte and increment by another one would result in reading the next lowbyte value on the negative clock edge ... 
 thus: read lowbyte - neg clock cycle, increment bytenumber , read highbyte - neg clockcycle, increment bytenumber by 3, read next lowbyte and so on 

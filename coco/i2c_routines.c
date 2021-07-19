@@ -264,7 +264,7 @@ int i2c_read8(struct ftdi_context* ftdiA, struct ftdi_context* ftdiB, unsigned c
 
     i2c_startCond(ftdiA, ftdiB);
 
-        /* Send Adress - leave Bit0 for RW */
+        /* Send Address - leave Bit0 for RW */
         while(ucMask!=1)
         {
             ucDataToSend = ((aucSendBuffer[uiBufferIndex] & ucMask)>>ucBitnumber);

@@ -18,7 +18,18 @@
  --*   59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.             *
  --***************************************************************************/
 
-module("tcs_chromaTable", package.seeall)
+-- module("tcs_chromaTable", package.seeall)
+
+-- Create the color_control class.
+local class = require "pl.class"
+
+---
+-- @type color_control
+local Tcs_chromaTable = class()
+
+function Tcs_chromaTable:_init()
+
+end
 
 -- Spectral sensitivity data of TCS3472 was requested by AMS/TAOS
 -- Original Data was given in 5 nanometer steps in RGB(C) color space 
@@ -28,7 +39,7 @@ module("tcs_chromaTable", package.seeall)
 -- wavelengths corresponding to their x and y chromaticity values were saved into following table
  
 --interpolated spectral responsitivity data of tcs3472:
-tTCS_Chromaticity = {
+Tcs_chromaTable.tTCS_Chromaticity = {
 
      [     1] = { nm =  405.0000 , x =    0.183252606676439 , y = 0.087698811371711 },
      [     2] = { nm =  405.3125 , x =    0.182759625452102 , y = 0.087424920595283 },
@@ -854,7 +865,7 @@ tTCS_Chromaticity = {
 -- tTCS_dirVector contains the direction vector formed by the x/y sets given in tTCS_Chromaticity
 -- The direction vector starts in the reference White Point (here refWhitex = 0.312727 refWhitey = 0.329023)
 -- and ends in the points of tTCS_Chromaticity
-tTCS_dirVector = {
+Tcs_chromaTable.tTCS_dirVector = {
 	[  1] = { nm = 405.0000, x = -0.129474393323561, y = -0.241324188628289 },
 	[  2] = { nm = 405.3125, x = -0.129967374547898, y = -0.241598079404717 },
 	[  3] = { nm = 405.6250, x = -0.130478111350176, y = -0.241887586050175 },
@@ -1674,7 +1685,7 @@ tTCS_dirVector = {
 	[817] = { nm = 660.0000, x = 0.287928727694500, y = -0.014035426814100 }
 }
 
-tReferenceLEDcolors = {
+Tcs_chromaTable.tReferenceLEDcolors = {
 	[0  ] = {colorname = "OFF State",  nm = 0  },
 	[405] = {colorname = "Ultra Blue", nm = 405},
 	[406] = {colorname = "Ultra Blue", nm = 406},
@@ -1933,3 +1944,5 @@ tReferenceLEDcolors = {
 	[659] = {colorname = "High Efficiency Red", nm = 659},
 	[660] = {colorname = "High Efficiency Red", nm = 660}
 }
+
+return Tcs_chromaTable

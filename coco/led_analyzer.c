@@ -283,7 +283,7 @@ int connect_to_devices(void** apHandles, int apHlength, char** asSerial)
 			f = ftdi_usb_purge_buffers(apHandles[iArrayPos]);
 			if( f<0 )
 			{
-				fprintf(stderr, "... unable to purge buffers on device %d Channel A: %d (%s) \n", devCounter, f, ftdi_get_error_string(apHandles[iArrayPos]));
+				fprintf(stderr, "... unable to purge buffers on device %d Channel B: %d (%s) \n", devCounter, f, ftdi_get_error_string(apHandles[iArrayPos]));
 				ftdi_free(apHandles[iArrayPos]);
 				return -1;
 			}
@@ -377,6 +377,10 @@ int init_sensors(void** apHandles, int devIndex)
 	int handleIndex = devIndex * 2;
 	int iErrorcode = 0;
 	unsigned char aucTempbuffer[16];
+	int iResult;
+
+	// be optimistic
+	iResult = 0;
 
 	int iHandleLength = get_number_of_handles(apHandles);
 
@@ -388,16 +392,21 @@ int init_sensors(void** apHandles, int devIndex)
 		return ERR_INDEXING;
 	}
 
-	if(tcs_clearInt(apHandles[handleIndex], apHandles[handleIndex+1]) != 0)
+	iResult = tcs_clearInt(apHandles[handleIndex], apHandles[handleIndex+1]);
+	if(iResult != 0)
 	{
 		printf("... failed to clear interrupt channel on device %d...\n", devIndex);
+		return iResult;
 	}
 
-	if(tcs_ON(apHandles[handleIndex], apHandles[handleIndex+1]) != 0)
+	iResult = tcs_ON(apHandles[handleIndex], apHandles[handleIndex+1]);
+	if(iResult != 0)
 	{
 		printf("... failed to turn the sensors on on device %d...\n", devIndex);
+		return iResult;
 	}
 
+// Checks whether the sensors are activated
 	iErrorcode = tcs_identify(apHandles[handleIndex], apHandles[handleIndex+1], aucTempbuffer);
 	if( iErrorcode>0 )
 	{
@@ -440,7 +449,7 @@ int read_colors(void** apHandles, int devIndex, unsigned short* ausClear, unsign
 	unsigned char aucTempbuffer[16];
 	int iResult;
 
-
+	// Be optimistic
 	iErrorcode = 0;
 
 	iHandleLength = get_number_of_handles(apHandles);

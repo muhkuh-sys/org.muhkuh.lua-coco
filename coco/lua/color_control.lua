@@ -1,317 +1,550 @@
----- importing ----
+-- Create the color_control class.
+local class = require "pl.class"
 
-require("led_analyzer")       -- api for color controller device 
-require("color_conversions")  -- handles conversion between color spaces and array to table (or vice versa) handling
-require("color_validation")   -- Validate your colors, contains helper to print your colors and store your colors in adequate arrays
-require("generate_xml")
+---
+-- @type color_control
+local Color_control = class()
+
+--- init color_control
+function Color_control:_init()
+	local tLogWriter = require "log.writer.filter".new("info", require "log.writer.console.color".new())
+
+	-- local strLogDir = ".logs"
+	-- local strLogFilename = ".log_Data.log"
+
+	-- local tLogWriter =
+	-- 	require "log.writer.list".new(
+	-- 	tLogWriter,
+	-- 	require "log.writer.file".new {
+	-- 		log_dir = strLogDir, --   log dir
+	-- 		log_name = strLogFilename, --   current log name
+	-- 		max_rows = 100000, -- max row size
+	-- 		max_size = 1000000, --   max file size in bytes
+	-- 		roll_count = 10 --   count files
+	-- 	}
+	-- )
+
+	local tLog =
+		require "log".new(
+		-- maximum log level
+		"trace",
+		-- writer
+		require "log.writer.prefix".new("[COCO COLOR_CONTROL] ", tLogWriter),
+		-- formatter
+		require "log.formatter.format".new()
+	)
+
+	self.tLog = tLog
+
+	local led_analyzer = require("led_analyzer")
+	self.led_analyzer = led_analyzer
+
+	-- handles conversion between color spaces and array to table (or vice versa) handling
+	local color_conversions = require("color_conversions")()
+	self.color_conversions = color_conversions
+
+	-- Validate your colors, contains helper to print your colors and store your colors in adequate arrays
+	local color_validation = require("color_validation")
+	self.color_validation = color_validation
+
+	local pl = require "pl.import_into"()
+	self.pl = pl
+
+	self.json = require "dkjson"
+
+	self.bit = require "bit"
+
+	-- Return values if the device or sensors on the device failed -- given from C code
+	local auiError_msg = {
+		IDENTIFICATION_ERROR = 0x40000000,
+		INCOMPLETE_CONVERSION_ERROR = 0x20000000,
+		EXCEEDED_CLEAR_ERROR = 0x10000000,
+		DEVICE_ERROR_FATAL = 0x08000000,
+		USB_ERROR = 0x04000000,
+		INDEXING_ERROR = -100,
+		WRITE_ERR_CH_A = -1,
+		WRITE_ERR_CH_B = -2,
+		READ_ERR_CH_A = -3,
+		READ_ERR_CH_B = -4,
+		ERR_INCORRECT_AMOUNT = -5
+	}
+	self.auiError_msg = auiError_msg
+
+	local auiError_decoding = {
+		[auiError_msg["IDENTIFICATION_ERROR"]] = "Identification error occured, e.g. the ID register value couldn't be read",
+		[auiError_msg["INCOMPLETE_CONVERSION_ERROR"]] = "The conversion was not complete at the time the ADC register was accessed",
+		[auiError_msg["EXCEEDED_CLEAR_ERROR"]] = "The maximum amount of clear level was reached, i.e. the sensor got digitally saturated",
+		[auiError_msg["DEVICE_ERROR_FATAL"]] = "Fatal error on a device, writing / reading from a ftdi channel failed",
+		[auiError_msg["USB_ERROR"]] = "USB error on a device, which means that we read back a different number of bytes than we expected to read",
+		[auiError_msg["INDEXING_ERROR"]] = "Indexing outside the handles array (apHandles)",
+		[auiError_msg["WRITE_ERR_CH_A"]] = "Error writing to channel A",
+		[auiError_msg["WRITE_ERR_CH_B"]] = "Error writing to channel B",
+		[auiError_msg["READ_ERR_CH_A"]] = "Error reading from channel A",
+		[auiError_msg["READ_ERR_CH_B"]] = "Error reading from channel B",
+		[auiError_msg["ERR_INCORRECT_AMOUNT"]] = "Error - received a different amount of bytes than expected"
+	}
+	self.auiError_decoding = auiError_decoding
+
+	local MAXDEVICES = 50
+	local MAXSENSORS = 16
+	local MAXHANDLES = MAXDEVICES * 2
+	local MAXSERIALS = MAXDEVICES
+
+	self.MAXDEVICES = MAXDEVICES
+	self.MAXSENSORS = MAXSENSORS
+	self.MAXHANDLES = MAXHANDLES
+	self.MAXSERIALS = MAXSERIALS
+
+	-- Color and light related data from the TCS3472 will be stored in following arrays --
+	local ausClear = led_analyzer.new_ushort(MAXSENSORS)
+	local ausRed = led_analyzer.new_ushort(MAXSENSORS)
+	local ausGreen = led_analyzer.new_ushort(MAXSENSORS)
+	local ausBlue = led_analyzer.new_ushort(MAXSENSORS)
+	local ausCCT = led_analyzer.new_ushort(MAXSENSORS)
+	local afLUX = led_analyzer.new_afloat(MAXSENSORS)
+	-- system settings from tcs3472 will be stored in following arrays --
+	local aucGains = led_analyzer.new_puchar(MAXSENSORS)
+	local aucIntTimes = led_analyzer.new_puchar(MAXSENSORS)
+	-- serial numbers of connected color controller(s) will be stored in asSerials --
+	local asSerials = led_analyzer.new_astring(MAXSERIALS)
+	local tStrSerials = {}
+	-- handle to all connected color controller(s) will be stored in apHandles (note 2 handles per device)
+	local apHandles = led_analyzer.new_apvoid(MAXHANDLES)
+	-- global table contains all color and light related data / global for easy access by C
+	local tColorTable = {}
+	-- number of 1 scanned / 2 connected devices
+	local numberOfDevices = 0
+
+	self.ausClear = ausClear
+	self.ausRed = ausRed
+	self.ausGreen = ausGreen
+	self.ausBlue = ausBlue
+	self.ausCCT = ausCCT
+	self.afLUX = afLUX
+	self.aucGains = aucGains
+	self.aucIntTimes = aucIntTimes
+	self.asSerials = asSerials
+	self.tStrSerials = tStrSerials
+	self.apHandles = apHandles
+	self.tColorTable = tColorTable
+	self.numberOfDevices = numberOfDevices
+end
 
 
--- LED Test retvals
-TEST_RESULT_OK            = 0
-TEST_RESULT_FAIL          = 1
-TEST_RESULT_DEVICE_ERROR  = 2
+--- Translate the errorcode to the errormessage 
+function Color_control:decodingErrorcode(err_code)
+	local auiError_decoding = self.auiError_decoding
 
--- Return values if the device or sensors on the device failed -- dont change !
-IDENTIFICATION_ERROR        = 0x40000000
-INCOMPLETE_CONVERSION_ERROR = 0x20000000
-EXCEEDED_CLEAR_ERROR        = 0x10000000
-DEVICE_ERROR_FATAL          = 0x08000000
-USB_ERROR                   = 0x04000000
-
-MAXDEVICES = 50
-MAXSENSORS = 16
-MAXHANDLES = MAXDEVICES * 2
-MAXSERIALS = MAXDEVICES
-
--- tcs3472 specific settings for gain
-TCS3472_GAIN_1X  = 0x00
-TCS3472_GAIN_4X  = 0x01
-TCS3472_GAIN_16X = 0x02
-TCS3472_GAIN_60X = 0x03
-
--- tcs3472 specific settings for integration time
-TCS3472_INTEGRATION_2_4ms       = 0xFF
-TCS3472_INTEGRATION_24ms        = 0xF6
-TCS3472_INTEGRATION_100ms       = 0xD6
-TCS3472_INTEGRATION_154ms       = 0xC0
-TCS3472_INTEGRATION_200ms       = 0xAD
-TCS3472_INTEGRATION_700ms       = 0x00
-
--- indexes for entries in tColorTable
-ENTRY_WAVELENGTH = 1
-ENTRY_RGB        = 2
-ENTRY_XYZ        = 3
-ENTRY_Yxy        = 4
-ENTRY_HSV        = 5
-ENTRY_SETTINGS   = 6
-ENTRY_ERRORCODE  = 7
-
-
-local fArraysCreated    = false
-
--- Color and light related data from the TCS3472 will be stored in following arrays --
-local ausClear          = nil
-local ausRed            = nil
-local ausGreen          = nil
-local ausBlue           = nil
-local ausCCT            = nil
-local afLUX             = nil
--- system settings from tcs3472 will be stored in following arrays --
-local aucGains          = nil
-local aucIntTimes       = nil
--- serial numbers of connected color controller(s) will be stored in asSerials --
-local asSerials         = nil
-local tStrSerials       = {}
--- handle to all connected color controller(s) will be stored in apHandles (note 2 handles per device)
-local apHandles         = nil
--- global table contains all color and light related data / global for easy access by C
-tColorTable             = {}
--- number of 1 scanned / 2 connected devices
-local numberOfDevices   = 0
--- table that contains a test summary for each device --
-local tTestSummary      = nil
-
-
-
-
-local function create_arrays()
-	if fArraysCreated~=true then
-		-- Color and light related data from the TCS3472 will be stored in following arrays --
-		ausClear          = led_analyzer.new_ushort(MAXSENSORS)
-		ausRed            = led_analyzer.new_ushort(MAXSENSORS)
-		ausGreen          = led_analyzer.new_ushort(MAXSENSORS)
-		ausBlue           = led_analyzer.new_ushort(MAXSENSORS)
-		ausCCT            = led_analyzer.new_ushort(MAXSENSORS)
-		afLUX             = led_analyzer.new_afloat(MAXSENSORS)
-		-- system settings from tcs3472 will be stored in following arrays --
-		aucGains          = led_analyzer.new_puchar(MAXSENSORS)
-		aucIntTimes       = led_analyzer.new_puchar(MAXSENSORS)
-		-- serial numbers of connected color controller(s) will be stored in asSerials --
-		asSerials         = led_analyzer.new_astring(MAXSERIALS)
-		tStrSerials       = {}
-		-- handle to all connected color controller(s) will be stored in apHandles (note 2 handles per device)
-		apHandles         = led_analyzer.new_apvoid(MAXHANDLES)
-		-- global table contains all color and light related data / global for easy access by C
-		tColorTable       = {}
-		-- number of 1 scanned / 2 connected devices
-		numberOfDevices   = 0
-		-- table that contains a test summary for each device --
-		tTestSummary      = nil
-
-		fArraysCreated = true
+	local err_msg = auiError_decoding[err_code]
+	if err_msg == nil then
+		return "Unkown error code"
+	else
+		return err_msg
 	end
 end
 
+--- scan possible CoCo devices
+function Color_control:scanDevices()
+	local tLog = self.tLog
+	local iResult
+	local err_msg = nil
 
+	-- be pessimistic
+	iResult = -1
 
-function scanDevices()
-	create_arrays()
+	iResult = self.led_analyzer.scan_devices(self.asSerials, self.MAXSERIALS)
 
-	numberOfDevices = led_analyzer.scan_devices(asSerials, MAXSERIALS)
-	tStrSerials = color_conversions.astring2table(asSerials, numberOfDevices)
+	if iResult <= 0 then
+		err_msg = "scan devices failed!"
+		tLog.error(err_msg)
+		return iResult, err_msg
+	end
+	-- all detected devices
+	self.numberOfDevices = iResult
 
-	return numberOfDevices, generate_xml.generate_xml_exception(numberOfDevices), tStrSerials
+	self.tStrSerials = self.color_conversions:astring2table(self.asSerials, self.numberOfDevices)
+	return iResult, err_msg
 end
-
-
 
 -- connects to color controller devices with serial numbers given in table tStrSerials
 -- if tOptionalSerials doesn't exist, function will connect to all color controller devices
 -- taking the order of their serial numbers into account (serial number 20000 will have a smaller index than 20004)
-function connectDevices(tOptionalSerials)
-	if(tOptionalSerials == nil) then
-		numberOfDevices = led_analyzer.connect_to_devices(apHandles, MAXHANDLES, color_conversions.table2astring(tStrSerials, asSerials))
+function Color_control:connectDevices(tOptionalSerials)
+	local tLog = self.tLog
+	local iResult
+	local aString
+	local err_msg = nil
+
+	-- be pessimistic
+	iResult = -1
+
+	if (tOptionalSerials == nil) then
+		iResult = self.color_conversions:table2astring(self.tStrSerials, self.asSerials, self.MAXSERIALS)
+
+		if iResult < 0 then
+			err_msg = "converse table to string failed!"
+			tLog.error(err_msg)
+			return iResult, err_msg
+		end
+
+		iResult = self.led_analyzer.connect_to_devices(self.apHandles, self.MAXHANDLES, self.asSerials)
 	else
-		numberOfDevices = led_analyzer.connect_to_devices(apHandles, MAXHANDLES, color_conversions.table2astring(tOptionalSerials, asSerials))
+		iResult = self.color_conversions:table2astring(tOptionalSerials, self.asSerials, self.MAXSERIALS)
+
+		if iResult < 0 then
+			err_msg = "converse table to string failed!"
+			tLog.error(err_msg)
+			return iResult, err_msg
+		end
+
+		iResult = self.led_analyzer.connect_to_devices(self.apHandles, self.MAXHANDLES, self.asSerials)
 	end
 
-	return numberOfDevices, generate_xml.generate_xml_exception(numberOfDevices)
+	-- print("asSerials: ", self.asSerials)
+
+	if iResult <= 0 then
+		err_msg = "connect to devices failed!"
+		tLog.error(err_msg)
+		return iResult, err_msg
+	end
+	-- numb of connected devices (all detected or specified by tOptionalSerials)
+	self.numberOfDevices = iResult
+	return iResult, err_msg
 end
 
-
-
--- todo: return a strxml
 -- Initializes the devices, by turning them on, clearing flags and identifying them
-function initDevices(atSettings)
--- iterate over all devices and perform initialization --
+function Color_control:initDevices(atSettings)
+	-- iterate over all devices and perform initialization --
 	local devIndex = 0
-	local error_counter = 0
-	local ret = 0
+	local iResult
+	local tLog = self.tLog
+	local err_msg = nil
 
+	-- be optimistic
+	iResult = 0
 
-	while(devIndex < numberOfDevices) do
+	while (devIndex < self.numberOfDevices) do
 		--if atsettings is provided --
 		if atSettings ~= nil then
-			for i = 1, MAXSENSORS do
-				if atSettings[devIndex] ~= nil then 
-					led_analyzer.set_intTime_x(apHandles, devIndex, i-1, atSettings[devIndex][i].integration)
-					led_analyzer.set_gain_x(apHandles, devIndex, i-1, atSettings[devIndex][i].gain)
+			for i = 1, self.MAXSENSORS do
+				if atSettings[tostring(devIndex)] ~= nil then
+					iResult =
+						self.led_analyzer.set_intTime_x(
+						self.apHandles,
+						devIndex,
+						i - 1,
+						atSettings[tostring(devIndex)][tostring(i)].integration
+					)
+					if iResult < 0 then
+						err_msg =
+							string.format(
+							"set init time failed! Device: %d - Sensor: %d - Error Code: %d - Error Message: %s",
+							devIndex,
+							i,
+							iResult,
+							self:decodingErrorcode(iResult)
+						)
+						tLog.error(err_msg)
+						return iResult, err_msg
+					end
+					iResult =
+						self.led_analyzer.set_gain_x(self.apHandles, devIndex, i - 1, atSettings[tostring(devIndex)][tostring(i)].gain)
+					if iResult < 0 then
+						err_msg =
+							string.format(
+							"set gain failed! Device: %d - Sensor: %d - Error Code: %d - Error Message: %s",
+							devIndex,
+							i,
+							iResult,
+							self:decodingErrorcode(iResult)
+						)
+						tLog.error(err_msg)
+						return iResult, err_msg
+					end
 				end
 			end
 		end
 
-		ret = led_analyzer.init_sensors(apHandles, devIndex)
-		led_analyzer.get_intTime(apHandles, devIndex, aucIntTimes)
-		led_analyzer.get_gain(apHandles, devIndex, aucGains)
+		iResult = self.led_analyzer.init_sensors(self.apHandles, devIndex)
 
-		tColorTable[devIndex] = {}
-		tColorTable[devIndex][ENTRY_ERRORCODE] = ret
-		tColorTable[devIndex][ENTRY_SETTINGS]  = color_conversions.auc2settingsTable(aucIntTimes, aucGains, MAXSENSORS)
+		if iResult < 0 then
+			err_msg =
+				string.format(
+				"init sensors failed! Device: %d - Error Code: %d - Error Message: %s",
+				devIndex,
+				iResult,
+				self:decodingErrorcode(iResult)
+			)
+			tLog.error(err_msg)
+			return iResult, err_msg
+		end
+
+		iResult = self.led_analyzer.get_intTime(self.apHandles, devIndex, self.aucIntTimes)
+
+		if iResult < 0 then
+			err_msg =
+				string.format(
+				"get integration time failed! Device: %d - Error Code: %d - Error Message: %s",
+				devIndex,
+				iResult,
+				self:decodingErrorcode(iResult)
+			)
+			tLog.error(err_msg)
+			return iResult, err_msg
+		end
+
+		iResult = self.led_analyzer.get_gain(self.apHandles, devIndex, self.aucGains)
+
+		if iResult < 0 then
+			err_msg =
+				string.format(
+				"get gain failed! Device: %d - Error Code: %d - Error Message: %s",
+				devIndex,
+				iResult,
+				self:decodingErrorcode(iResult)
+			)
+			tLog.error(err_msg)
+			return iResult, err_msg
+		end
 
 		devIndex = devIndex + 1
 	end
 
-	return ret
+	return iResult, err_msg
 end
 
-
-
--- todo: return a strxml
+-- ATTENTION function only reads the activated RGBC channels
 -- starts the measurements on each opened color controller device
 -- having read and checked all raw color data, these will be converted into the needed color spaces and stored in a color table
-function startMeasurements()
-	local devIndex = 0
-	local error_counter = 0
-	local ret = 0
-	local fatal_error_occured
+function Color_control:startMeasurements()
+	local devIndex
+	local iResult
+	local tLog = self.tLog
+	local err_msg = nil
+	local bit = self.bit
+	local auiError_msg = self.auiError_msg
+	local fConversion
+	local uiConversion_count 
+	local tDeviceConversion
+
+	-- be optimistic
+	iResult = 0
+
+	local tStrSerials = self.color_conversions:astring2table(self.asSerials, self.numberOfDevices)
+
+	uiConversion_count = 0
+	fConversion = 0
 
 
-	tColorTable = {}
+	for i=0,self.numberOfDevices-1 do
+		tDeviceConversion[i] = 1
+	end
 
-	while(devIndex < numberOfDevices) do
-		-- Get Colours --
+	repeat
+		devIndex = 0
+		self.led_analyzer.wait4Conversion(200)
 
-		ret = led_analyzer.read_colors(apHandles, devIndex, ausClear, ausRed, ausGreen, ausBlue, aucIntTimes, aucGains)
-		if ret ~= 0 then
-			if ret == DEVICE_ERROR_FATAL then -- return code for fatal errors
-				fatal_error_occured = 1
-			end
+		while (devIndex < self.numberOfDevices) do
+			-- Get Colours --
+
+			if tDeviceConversion[devIndex] == 1 then
+			iResult =
+				self.led_analyzer.read_colors(
+				self.apHandles,
+				devIndex,
+				self.ausClear,
+				self.ausRed,
+				self.ausGreen,
+				self.ausBlue,
+				self.aucIntTimes,
+				self.aucGains
+			)
 		end
 
-		tColorTable[devIndex] = color_conversions.aus2colorTable(ausClear, ausRed, ausGreen, ausBlue, aucIntTimes, aucGains, ret, MAXSENSORS)
-		devIndex = devIndex + 1
-	end
+			if iResult == 0 then
+				fConversion = 0
+				tDeviceConversion[devIndex] = 0
+			elseif iResult ~= 0 then
+				if bit.band(iResult, auiError_msg["INCOMPLETE_CONVERSION_ERROR"]) ~= 0 and uiConversion_count <= 5 then
+					fConversion = 1
+					uiConversion_count = uiConversion_count + 1
+				else
+					err_msg =
+						string.format(
+						"read colors failed! Device: %d - Serial: %s - Error Code: %d",
+						devIndex,
+						tStrSerials[devIndex + 1],
+						iResult
+					)
+					tLog.error(err_msg)
+					return iResult, err_msg
+				end
+			end
 
-	if fatal_error_occured then
-		return DEVICE_ERROR_FATAL
-	end
+			self.tColorTable[tStrSerials[devIndex + 1]] =
+				self.color_conversions:aus2colorTable(
+				self.ausClear,
+				self.ausRed,
+				self.ausGreen,
+				self.ausBlue,
+				self.aucIntTimes,
+				self.aucGains,
+				self.MAXSENSORS
+			)
+			-- self.pl.pretty.dump(self.tColorTable[tStrSerials[devIndex+1]])
 
-	-- otherwise return 0 as no fatal error occured, the actualy ret code for smaller errors is stored in tColorTable
-	return 0
+			devIndex = devIndex + 1
+		end
+	until (fConversion == 0)
+
+	return iResult, err_msg
 end
 
-
-
--- function compares the color sets read from the devices to the testtable given in tDUT
--- the LEDs under test must be on, this means we test if the right LEDs (correct wavelength, sat, ...) are mounted on the baord
--- a table tTestSummary will be filled according to the test results (led on, led off, wrong led detected and so on)
--- returns: an integer as return value (ret) indicating the result of the led test (0 if ok)
---          a string as second parameter. string contains the test result with traces as xml
-function validateLEDs(tDUT, lux_check_enable)
-	local devIndex = 0
-	local ret = 0
-	local strXml
-
-
-	-- empty test summary --
-	tTestSummary = {}
-
-	while(devIndex < numberOfDevices) do
-		tTestSummary[devIndex] = color_validation.getDeviceSummary(tDUT[devIndex], tColorTable[devIndex][ENTRY_WAVELENGTH], lux_check_enable)
-		devIndex = devIndex + 1
-	end
-
-	ret = color_validation.validateTestSummary(numberOfDevices, tTestSummary)
-	strXml = generate_xml.generate_xml(tTestSummary)
-
-	return ret, strXml
+function Color_control:swapUp(sCurSerial)
+	self.led_analyzer.swap_up(self.asSerials, sCurSerial)
+	self.tStrSerials = self.color_conversions:astring2table(self.asSerials, self.numberOfDevices)
 end
 
-
-
-function swapUp(sCurSerial)
-	led_analyzer.swap_up(asSerials, sCurSerial)
-	tStrSerials = color_conversions.astring2table(asSerials, numberOfDevices)
-	return tStrSerials
+function Color_control:swapDown(sCurSerial)
+	self.led_analyzer.swap_down(self.asSerials, sCurSerial)
+	self.tStrSerials = self.color_conversions:astring2table(self.asSerials, self.numberOfDevices)
 end
 
-
-
-function swapDown(sCurSerial)
-	led_analyzer.swap_down(asSerials, sCurSerial)
-	tStrSerials = color_conversions.astring2table(asSerials, numberOfDevices)
-	return tStrSerials
+function Color_control:setGainX(iDeviceIndex, iSensorIndex, gain)
+	return self.led_analyzer.set_gain_x(self.apHandles, iDeviceIndex, iSensorIndex, gain)
 end
 
-
-
-function setGainX(iDeviceIndex, iSensorIndex, gain)
-	return led_analyzer.set_gain_x(apHandles, iDeviceIndex, iSensorIndex, gain)
+function Color_control:setIntTimeX(iDeviceIndex, iSensorIndex, intTime)
+	return self.led_analyzer.set_intTime_x(self.apHandles, iDeviceIndex, iSensorIndex, intTime)
 end
 
-
-
-function setIntTimeX(iDeviceIndex, iSensorIndex, intTime)
-	return led_analyzer.set_intTime_x(apHandles, iDeviceIndex, iSensorIndex, intTime)
-end
-
-
-
-function setSettings(intTime, gain)
+function Color_control:setSettings(intTime, gain)
 	local devIndex = 0
 	local ret
-	while(devIndex < numberOfDevices) do
+	while (devIndex < self.numberOfDevices) do
 		if gain ~= nil then
-			ret = led_analyzer.set_gain(apHandles, devIndex, gain)
+			ret = self.led_analyzer.set_gain(self.apHandles, devIndex, gain)
 		end
 		if intTime ~= nil then
-			ret = led_analyzer.set_intTime(apHandles, devIndex, intTime)
+			ret = self.led_analyzer.set_intTime(self.apHandles, devIndex, intTime)
 		end
 		devIndex = devIndex + 1
 	end
 	return ret
 end
 
-
-
 -- don't forget to clean up after every test --
-function free()
-	if fArraysCreated==true then
-		-- CLEAN UP --
-		led_analyzer.free_devices(apHandles)
-		led_analyzer.delete_ushort(ausClear)
-		led_analyzer.delete_ushort(ausRed)
-		led_analyzer.delete_ushort(ausGreen)
-		led_analyzer.delete_ushort(ausBlue)
-		led_analyzer.delete_ushort(ausCCT)
-		led_analyzer.delete_afloat(afLUX)
-		led_analyzer.delete_puchar(aucGains)
-		led_analyzer.delete_puchar(aucIntTimes)
-		led_analyzer.delete_apvoid(apHandles)
-		led_analyzer.delete_astring(asSerials)
+function Color_control:free()
+	-- CLEAN UP --
+	self.led_analyzer.free_devices(self.apHandles)
+	self.led_analyzer.delete_ushort(self.ausClear)
+	self.led_analyzer.delete_ushort(self.ausRed)
+	self.led_analyzer.delete_ushort(self.ausGreen)
+	self.led_analyzer.delete_ushort(self.ausBlue)
+	self.led_analyzer.delete_ushort(self.ausCCT)
+	self.led_analyzer.delete_afloat(self.afLUX)
+	self.led_analyzer.delete_puchar(self.aucGains)
+	self.led_analyzer.delete_puchar(self.aucIntTimes)
+	self.led_analyzer.delete_apvoid(self.apHandles)
+	self.led_analyzer.delete_astring(self.asSerials)
 
-		ausClear          = nil
-		ausRed            = nil
-		ausGreen          = nil
-		ausBlue           = nil
-		ausCCT            = nil
-		afLUX             = nil
-		-- system settings from tcs3472 will be stored in following arrays --
-		aucGains          = nil
-		aucIntTimes       = nil
-		-- serial numbers of connected color controller(s) will be stored in asSerials --
-		asSerials         = nil
-		tStrSerials       = {}
-		-- handle to all connected color controller(s) will be stored in apHandles (note 2 handles per device)
-		apHandles         = nil
-		-- global table contains all color and light related data / global for easy access by C
-		tColorTable             = {}
-		-- number of 1 scanned / 2 connected devices
-		numberOfDevices   = 0
-		-- table that contains a test summary for each device --
-		tTestSummary      = nil
-
-		fArraysCreated = false
-	end
+	self.ausClear = nil
+	self.ausRed = nil
+	self.ausGreen = nil
+	self.ausBlue = nil
+	self.ausCCT = nil
+	self.afLUX = nil
+	-- system settings from tcs3472 will be stored in following arrays --
+	self.aucGains = nil
+	self.aucIntTimes = nil
+	-- serial numbers of connected color controller(s) will be stored in asSerials --
+	self.asSerials = nil
+	self.tStrSerials = {}
+	-- handle to all connected color controller(s) will be stored in apHandles (note 2 handles per device)
+	self.apHandles = nil
+	-- global table contains all color and light related data / global for easy access by C
+	self.tColorTable = {}
+	-- number of 1 scanned / 2 connected devices
+	self.numberOfDevices = 0
 end
 
+function Color_control:test(tData)
+	local tLog = self.tLog
+	local err_msg = nil
+
+	-- be pessimistic
+	local iResult = -1
+
+	if tData == nil then
+		err_msg = "No data of CoCo settings (and optional data of serials) available."
+		tLog.error(err_msg)
+		return iResult, err_msg
+	end
+
+	local atSettings = tData.atSettings
+	if atSettings == nil then
+		err_msg = "No data of CoCo settings available."
+		tLog.error(err_msg)
+		return iResult, err_msg
+	end
+
+	local uiConversationTime = tData.uiConversationTime
+	if uiConversationTime == nil then
+		err_msg = "No data of CoCo conversion time available."
+		tLog.error(err_msg)
+		return iResult, err_msg
+	end
+
+	-- optional
+	local asSerials = tData.asSerials
+	if atSettings == nil then
+		tLog.info("No opional data of CoCo serials available.")
+	end
+
+	tLog.info("start to scan CoCo devices")
+	iResult, err_msg = self:scanDevices()
+
+	if iResult <= 0 then
+		self:free()
+		return iResult, err_msg
+	end
+	tLog.info("scan CoCo devices finished")
+	tLog.info(
+		"detected number of devices: %d - with serials of: %s",
+		self.numberOfDevices,
+		table.concat(self.tStrSerials, ",")
+	)
+
+	tLog.info("initialize connection to devices: ")
+	iResult, err_msg = self:connectDevices(asSerials)
+
+	if iResult <= 0 then
+		self:free()
+		return iResult, err_msg
+	end
+	tLog.info("established connection to devices: ")
+
+	tLog.info("start of the initialization")
+	iResult, err_msg = self:initDevices(atSettings)
+	if iResult < 0 then
+		self:free()
+		return iResult, err_msg
+	end
+	tLog.info("initialization finished")
+
+	-- tLog.info("conversion time: %d", uiConversationTime)
+	-- self.led_analyzer.wait4Conversion(uiConversationTime)
+
+	tLog.info("start of the measurement")
+	iResult, err_msg = self:startMeasurements()
+	if iResult ~= 0 then
+		self:free()
+		return iResult, err_msg
+	end
+
+	tLog.info("measurement of CoCo finished")
+
+	return iResult, err_msg
+end
+
+return Color_control

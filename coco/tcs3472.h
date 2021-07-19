@@ -96,9 +96,11 @@ an return code will be returned which can be used to determine which specific se
 /** wait long bit */
 #define TCS3472_WLONG_BIT 0x02
 
-/** ID register value for tcs347215 */
+/** ID register value for TCS34711 & TCS34715 */
 #define TCS3472_1_5_VALUE 0x14
-/** ID register value for tcs347237 */
+/** ID register value for TCS34725 */
+#define TCS3472_2_5_VALUE 0x44
+/** ID register value for TCS34713 & TCS34717 */
 #define TCS3472_3_7_VALUE 0x1D
 
 /** RGBC clear channel interrupt bit */

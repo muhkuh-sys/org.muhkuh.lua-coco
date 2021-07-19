@@ -61,8 +61,8 @@ int tcs_identify(struct ftdi_context* ftdiA, struct ftdi_context* ftdiB, unsigne
 		
             for(i = 0; i<=15; i++)
             {
-				/* 0x14 = ID for tcs3472        0x44 = ID for tcs3471 */
-               if(aucReadbuffer[i] != (0x14) && aucReadbuffer[i] != 0x44)
+				/* 0x14 = ID for tcs3471        0x44 = ID for tcs3472 */
+               if(aucReadbuffer[i] != TCS3472_1_5_VALUE && aucReadbuffer[i] != TCS3472_2_5_VALUE)
                {
                     aucErrorbuffer[i] = i+1;
                     uiErrorcounter ++;
@@ -221,7 +221,7 @@ int tcs_waitForData(struct ftdi_context* ftdiA, struct ftdi_context* ftdiB)
 
                if(uiSuccesscounter == 16)
                {
-                   //printf("Conversions complete.\n");
+                   printf("Conversions complete.\n");
                    return 0; 
                }
             }
@@ -272,7 +272,7 @@ int tcs_conversions_complete(unsigned char* aucStatusRegister)
 
                if(uiSuccesscounter == 16)
                {
-                   //printf("Conversions complete.\n");
+                   printf("Conversions complete.\n");
                    return 0; 
                }
             }
@@ -346,7 +346,7 @@ int tcs_readColors(struct ftdi_context* ftdiA, struct ftdi_context* ftdiB, unsig
 					unsigned short* ausGreen, unsigned short* ausBlue)
 {
 	int iRetval;
-	/* Begin with the status registere, the autoincrement bit effects the reading of 9 bytes 
+	/* Begin with the status register, the autoincrement bit effects the reading of 9 bytes 
 	these 9 bytes consist of the status register (1 byte) and 4 words, one for each colour */
 	unsigned char aucTempbuffer[2] = {(TCS_ADDRESS<<1), TCS3472_AUTOINCR_BIT | TCS3472_COMMAND_BIT | TCS3472_STATUS_REG};												 
 	unsigned char aucStatusRegister[16];
@@ -491,7 +491,7 @@ int tcs_exClear(struct ftdi_context* ftdiA, struct ftdi_context* ftdiB, unsigned
 
         if(uiSuccesscounter ==16)
         {
-            //printf("All gain settings ok.\n");
+            printf("All gain settings ok.\n");
             return 0;
         }
 
