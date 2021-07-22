@@ -46,8 +46,6 @@ function Color_control:_init()
 	local pl = require "pl.import_into"()
 	self.pl = pl
 
-	self.json = require "dkjson"
-
 	self.bit = require "bit"
 
 	-- Return values if the device or sensors on the device failed -- given from C code
