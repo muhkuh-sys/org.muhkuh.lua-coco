@@ -218,8 +218,8 @@ local strFilenameResults = "CoCo_Results.json"
 local strFilenameTestSummary = "TestSummary.json"
 local lux_check_enable = 1
 
-local tData = "/home/struber/workspace/coco/tData.json"
-local tTestSet = "/home/struber/workspace/coco/tTestSet.json"
+local tData = "/home/struber/workspace/coco/config/tData.json"
+local tTestSet = "/home/struber/workspace/coco/config/tTestSet.json"
 local tCoCo_Client =
 	CoCo_Client(host, port, strFilenameResults, strFilenameTestSummary, tData, tTestSet, lux_check_enable)
 tCoCo_Client:run()

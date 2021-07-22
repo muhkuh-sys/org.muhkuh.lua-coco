@@ -43,10 +43,6 @@ function Color_control:_init()
 	local color_conversions = require("color_conversions")()
 	self.color_conversions = color_conversions
 
-	-- Validate your colors, contains helper to print your colors and store your colors in adequate arrays
-	local color_validation = require("color_validation")
-	self.color_validation = color_validation
-
 	local pl = require "pl.import_into"()
 	self.pl = pl
 
@@ -335,7 +331,7 @@ function Color_control:startMeasurements()
 	uiConversion_count = 0
 	fConversion = 0
 
-
+	tDeviceConversion = {}
 	for i=0,self.numberOfDevices-1 do
 		tDeviceConversion[i] = 1
 	end
