@@ -7,6 +7,7 @@ from jonchki import jonchkihere
 import glob
 import os
 import subprocess
+import sys
 
 
 tPlatform = cli_args.parse()
@@ -199,6 +200,7 @@ astrFolders = [
     os.path.join(strCfg_workingFolder, 'lua5.1', 'build_requirements'),
     os.path.join(strCfg_workingFolder, 'lua5.4'),
     os.path.join(strCfg_workingFolder, 'lua5.4', 'build_requirements'),
+    os.path.join(strCfg_workingFolder, 'server'),
 ]
 for strPath in astrFolders:
     if os.path.exists(strPath) is not True:
@@ -350,3 +352,24 @@ astrCmd.append(strCfg_projectFolder)
 strCwd = os.path.join(strCfg_workingFolder, 'lua5.4')
 subprocess.check_call(' '.join(astrCmd), shell=True, cwd=strCwd, env=astrEnv)
 subprocess.check_call('%s pack' % strMake, shell=True, cwd=strCwd, env=astrEnv)
+
+
+# ---------------------------------------------------------------------------
+#
+# Build the server packet
+#
+
+# Run jonchki.
+sys.stdout.flush()
+sys.stderr.flush()
+astrArguments = [strJonchki]
+astrArguments.append('install-dependencies')
+astrArguments.extend(['-v', strCfg_jonchkiVerbose])
+astrArguments.extend(['--logfile', os.path.join(strCfg_workingFolder, 'server', 'jonchki.log')])
+astrArguments.extend(['--syscfg', os.path.join(strCfg_projectFolder, 'jonchki', 'org.muhkuh.tools-coco_server', 'jonchkisys.cfg')])
+astrArguments.extend(['--prjcfg', os.path.join(strCfg_projectFolder, 'jonchki', 'org.muhkuh.tools-coco_server', 'jonchkicfg.xml')])
+astrArguments.extend(['--finalizer', os.path.join(strCfg_projectFolder, 'jonchki', 'org.muhkuh.tools-coco_server', 'finalizer.lua')])
+astrArguments.extend(['--dependency-log', os.path.join(strCfg_projectFolder, 'dependency-log-server.xml')])
+astrArguments.extend(astrJONCHKI_SYSTEM)
+astrArguments.append(os.path.join(strCfg_workingFolder, 'server', 'coco-server.xml'))
+sys.exit(subprocess.call(astrArguments, cwd=strCfg_workingFolder))

@@ -1,11 +1,13 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.7)
 
 PROJECT("Led_Analyzer")
 
-SET(PROJECT_VERSION 0.0.1)
+SET(PROJECT_VERSION 1.0.0)
 
 # Get the VCS version for the jonchki configuration.
 INCLUDE(${CMAKE_HOME_DIRECTORY}/cmake/version.cmake)
+
+# include_directories(${LUA_INCLUDE_DIR})
 
 # Filter the jonchki configuration.
 CONFIGURE_FILE(installer/lua${BUILDCFG_LUA_VERSION}/coco.xml
@@ -21,6 +23,10 @@ OPTION(BUILDCFG_ONLY_JONCHKI_CFG "Build only the jonchki configuration. This is 
 #
 
 IF((${BUILDCFG_ONLY_JONCHKI_CFG} STREQUAL "OFF"))
+CONFIGURE_FILE(${CMAKE_HOME_DIRECTORY}/jonchki/org.muhkuh.tools-coco_server/coco_server.xml
+	${CMAKE_BINARY_DIR}/../server/coco-server.xml
+	@ONLY)
+	
 	# Enable tests (see here for details: http://www.vtk.org/Wiki/CMake/Testing_With_CTest)
 	ENABLE_TESTING()
 
@@ -75,6 +81,9 @@ IF((${BUILDCFG_ONLY_JONCHKI_CFG} STREQUAL "OFF"))
 
 	# Install the lua module.
 	INSTALL(TARGETS TARGET_led_analyzer DESTINATION ${INSTALL_DIR_LUA_MODULES})
+	INSTALL(FILES lua/color_control.lua lua/color_conversions.lua lua/color_validation.lua lua/tcs_chromaTable.lua  DESTINATION ${INSTALL_DIR_LUA_SCRIPTS})
+	INSTALL(DIRECTORY config/ DESTINATION config/)
+	INSTALL(FILES lua/CoCo_client.lua lua/CoCo_server.lua DESTINATION .)
 
 	# Add tests for this module.
 	IF((${CMAKE_SYSTEM_NAME} STREQUAL "Windows") AND (${CMAKE_COMPILER_IS_GNUCC}))
