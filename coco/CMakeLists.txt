@@ -82,7 +82,6 @@ CONFIGURE_FILE(${CMAKE_HOME_DIRECTORY}/jonchki/org.muhkuh.tools-coco_server/coco
 	# Install the lua module.
 	INSTALL(TARGETS TARGET_led_analyzer DESTINATION ${INSTALL_DIR_LUA_MODULES})
 	INSTALL(FILES lua/color_control.lua lua/color_conversions.lua lua/color_validation.lua lua/tcs_chromaTable.lua  DESTINATION ${INSTALL_DIR_LUA_SCRIPTS})
-	INSTALL(DIRECTORY config/ DESTINATION config/)
 	INSTALL(FILES lua/CoCo_client.lua lua/CoCo_server.lua DESTINATION .)
 
 	# Add tests for this module.
