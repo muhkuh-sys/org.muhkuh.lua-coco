@@ -9,6 +9,9 @@ function CoCo_Client:_init(host, port)
 	host = host or "127.0.0.1"
 	port = port or 5555
 
+	self.host = host
+	self.port = port
+
 	-- local strLogDir = ".logs"
 	-- local strLogFilename = ".log_Data.log"
 
