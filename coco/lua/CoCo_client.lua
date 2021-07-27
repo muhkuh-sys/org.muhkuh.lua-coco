@@ -3,8 +3,11 @@ local class = require "pl.class"
 local CoCo_Client = class()
 
 --- init CoCo_Client
-function CoCo_Client:_init(host, port, strFilenameResults, strFilenameTestSummary, tData, tTestSet, lux_check_enable)
+function CoCo_Client:_init(host, port)
 	local tLogWriter = require "log.writer.filter".new("info", require "log.writer.console.color".new())
+
+	host = host or "127.0.0.1"
+	port = port or 5555
 
 	-- local strLogDir = ".logs"
 	-- local strLogFilename = ".log_Data.log"
@@ -39,58 +42,58 @@ function CoCo_Client:_init(host, port, strFilenameResults, strFilenameTestSummar
 
 	self.color_validation = require("color_validation")()
 
-	self.tData = tData
-	self.tTestSet = tTestSet
-
-	self.host = host
-	self.port = port
-	self.strFilenameResults = strFilenameResults
-	self.strFilenameTestSummary = strFilenameTestSummary
-	self.lux_check_enable = lux_check_enable
 	self.tLog = tLog
 end
 
-function CoCo_Client:run()
+function CoCo_Client:run(strFilenameResults, strFilenameTestSummary, tData, tTestSet, lux_check_enable)
 	local pl = self.pl
 	local socket = self.socket
 	local host = self.host
 	local port = self.port
-	local strFilenameResults = self.strFilenameResults
-	local strFilenameTestSummary = self.strFilenameTestSummary
-	local tData = self.tData
-	local tTestSet = self.tTestSet
-	local lux_check_enable = self.lux_check_enable
 	local tLog = self.tLog
 	local json = self.json
-	-- local lunajson = self.lunajson
 	local color_validation = self.color_validation
 	local iResult
 
 	-- in the case tData is a filename of a json file instead of a table
+	if tData == nil then
+		tLog.error("No settings of CoCo specified in tData")
+		return -1
+	end
+
 	if type(tData) == "string" then
 		local strFilename = pl.path.expanduser(tData)
 
 		if pl.path.isfile(strFilename) == false then
 			tLog.error("The specified path of tData does not contain a file name")
+			return -1
 		else
 			local strBin, strMsg = self.pl.utils.readfile(strFilename, true)
 			if strBin == nil then
 				tLog.error('Failed to read "%s" : ', tData, tostring(strMsg))
+				return -1
 			end
 			tData = self.json.decode(strBin, 1, nil)
 		end
 	end
 
 	-- in the case tTestSet is a filename of a json file instead of a table
+	if tTestSet == nil then
+		tLog.error("No test set data specified in tTestSet")
+		return -1
+	end
+
 	if type(tTestSet) == "string" then
 		local strFilename = pl.path.expanduser(tTestSet)
 
 		if pl.path.isfile(strFilename) == false then
 			tLog.error("The specified path of tTestSet does not contain a file name")
+			return -1
 		else
 			local strBin, strMsg = self.pl.utils.readfile(strFilename, true)
 			if strBin == nil then
 				tLog.error('Failed to read "%s" : ', tTestSet, tostring(strMsg))
+				return -1
 			end
 			tTestSet = self.json.decode(strBin, 1, nil)
 		end
@@ -99,7 +102,7 @@ function CoCo_Client:run()
 	local tcp, err_msg = socket.tcp()
 	if tcp == nil then
 		tLog.error("Creating TCP master object failed. Error Message: %s", err_msg)
-		return
+		return -1
 	end
 
 	tcp:settimeout(10)
@@ -108,32 +111,30 @@ function CoCo_Client:run()
 	if iResult ~= 1 then
 		tLog.error("Connecting to %s:%d failed. Error Message: %s", host, port, err_msg)
 		tcp:close()
-		return
+		return -1
 	end
 
 	local tData_encoded = self.json.encode(tData, {indent = true})
-	-- local tData_encoded = lunajson.encode(tData)
 	iResult, err_msg = tcp:send(tData_encoded)
-	-- print(tData_encoded)
 	if iResult == nil then
 		tLog.error("Sending data to %s:%d failed. Error Message: %s", host, port, err_msg)
 		tcp:close()
-		return
+		return -1
 	end
 
 	-- transmission tData
 	local msg, partial
 	msg, err_msg, partial = tcp:receive()
 	if msg == nil then
-		tLog.error("T	-- print(tData_encoded)ransmission to %s:%d failed. Error Message: %s", host, port, err_msg)
+		tLog.error("Transmission to %s:%d failed. Error Message: %s", host, port, err_msg)
 		tcp:close()
-		return
+		return -1
 	end
 
 	if tonumber(msg) ~= 0 then
 		tLog.error("data transmission error")
 		tcp:close()
-		return
+		return -1
 	else
 		tLog.info("data received")
 	end
@@ -143,13 +144,13 @@ function CoCo_Client:run()
 	if msg == nil then
 		tLog.error("Transmission to %s:%d failed. Error Message: %s", host, port, err_msg)
 		tcp:close()
-		return
+		return -1
 	end
 
 	if tonumber(msg) ~= 0 then
 		tLog.error("data decoding error")
 		tcp:close()
-		return
+		return -1
 	else
 		tLog.info("data decoded")
 	end
@@ -159,7 +160,7 @@ function CoCo_Client:run()
 	if msg == nil then
 		tLog.error("Transmission to %s:%d failed. Error Message: %s", host, port, err_msg)
 		tcp:close()
-		return
+		return -1
 	end
 
 	if tonumber(msg) ~= 0 then
@@ -170,11 +171,11 @@ function CoCo_Client:run()
 		if msg == nil then
 			tLog.error("Transmission to %s:%d failed. Error Message: %s", host, port, err_msg)
 			tcp:close()
-			return
+			return -1
 		end
 		tLog.error(msg)
 		tcp:close()
-		return
+		return -1
 	else
 		tLog.info("CoCo measurement OK")
 
@@ -183,7 +184,7 @@ function CoCo_Client:run()
 		if tMeasurement == nil then
 			tLog.error("Transmission to %s:%d failed. Error Message: %s", host, port, err_msg)
 			tcp:close()
-			return
+			return -1
 		end
 
 		-- output string should not be in a single line - decode + encode with indent
@@ -195,6 +196,7 @@ function CoCo_Client:run()
 			tLog.info("OK. CoCo results was written to the file '%s'", strFilenameResults)
 		else
 			tLog.error('Failed to write the data to the file "%s": %s', strFilenameResults, strMsg)
+			return -1
 		end
 
 		-- validate measurement of CoCo with data of tTestSet
@@ -207,19 +209,13 @@ function CoCo_Client:run()
 			tLog.info("OK. CoCo test summary was written to the file '%s'", strFilenameTestSummary)
 		else
 			tLog.error('Failed to write the data to the file "%s": %s', strFilenameTestSummary, strMsg)
+			return -1
 		end
 	end
 
 	tcp:close()
+
+	return 0
 end
 
-local host, port = "127.0.0.1", 5555
-local strFilenameResults = "CoCo_Results.json"
-local strFilenameTestSummary = "TestSummary.json"
-local lux_check_enable = 1
-
-local tData = "/home/struber/workspace/coco/config/tData.json"
-local tTestSet = "/home/struber/workspace/coco/config/tTestSet.json"
-local tCoCo_Client =
-	CoCo_Client(host, port, strFilenameResults, strFilenameTestSummary, tData, tTestSet, lux_check_enable)
-tCoCo_Client:run()
+return CoCo_Client
