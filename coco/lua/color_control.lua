@@ -141,20 +141,29 @@ end
 function Color_control:scanDevices()
 	local tLog = self.tLog
 	local iResult
+	local numberOfDevices
 	local err_msg = nil
 
 	-- be pessimistic
 	iResult = -1
+	numberOfDevices = 0
 
-	iResult = self.led_analyzer.scan_devices(self.asSerials, self.MAXSERIALS)
+	numberOfDevices = self.led_analyzer.scan_devices(self.asSerials, self.MAXSERIALS)
 
-	if iResult <= 0 then
+	if numberOfDevices < 0 then
 		err_msg = "scan devices failed!"
 		tLog.error(err_msg)
 		return iResult, err_msg
+	elseif numberOfDevices == 0 then
+		err_msg = "no color controller device detected!"
+		tLog.error(err_msg)
+		return iResult, err_msg
+	else
+		iResult = 1
 	end
+
 	-- all detected devices
-	self.numberOfDevices = iResult
+	self.numberOfDevices = numberOfDevices
 
 	self.tStrSerials = self.color_conversions:astring2table(self.asSerials, self.numberOfDevices)
 	return iResult, err_msg
